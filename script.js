@@ -28,6 +28,15 @@ const havaDurumuHafizasi = {}; // Şehir hava durumlarını tekrar sorgulamamak 
 let aktifResimler = []; // Modal içindeki slider fotoğrafları dizisi
 let mevcutResimIndeksi = 0; // O an gösterilen resmin indeksi
 
+function metinTemizleme (metin){
+  if (!metin) return '';
+  return metin
+    .replace(/İ/g, 'i') // Türkçe büyük İ için özel haritalama
+    .replace(/I/g, 'ı') // Türkçe büyük I için özel haritalama
+    .normalize('NFD')   // Unicode ayrıştırma (harf + aksan)
+    .replace(/[\u0300-\u036f]/g, '') // Tüm aksan ve noktaları temizler
+    .toLowerCase();
+}
 // --- EKRANA KARTLARI ÇİZEN ANA FONKSİYON ---
 function listeyiCiz(gosterilecekListe = mekanlar) {
   seyehatListesi.innerHTML = ''; // Önceki kartları temizle
@@ -44,31 +53,35 @@ function listeyiCiz(gosterilecekListe = mekanlar) {
   }
 
   // Mekanlar dizisini dönüp HTML kart yapılarını oluşturuyoruz
-  const htmlDizisi = gosterilecekListe.map((mekan, indeks) => {
-    const { isim, sehir, kategori, puan, favori, resim, aciklama } = mekan;
+  const htmlDizisi = gosterilecekListe.map((mekan) => {
+    const { isim, sehir, ulke, kategori, puan, favori, resim, aciklama } = mekan;
+
+    const gercekIndeks = mekanlar.findIndex(m => m.isim === isim)
 
     const miniResim = resim || 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=300&q=80';
     const miniAciklama = aciklama || 'Bu rota için detaylar hazırlanıyor.';
     const favoriSinifi = favori ? 'favori-aktif' : '';
 
+    const konumBilgisi = ulke ? `${sehir},${ulke}` : sehir;
+
     return `
       <li class="travel-card-wrapper">
-        <article class="travel-card-mini ${favoriSinifi}" data-islem="detay-ac" data-indeks="${indeks}">
+        <article class="travel-card-mini ${favoriSinifi}" data-islem="detay-ac" data-indeks="${gercekIndeks}">
           <!-- Kapak Resmi -->
-          <img src="${miniResim}" alt="${isim}" class="mini-card-img" />
+          <img src="${miniResim}" id="resim-${gercekIndeks}" alt="${isim}" class="mini-card-img" />
 
           <div class="mini-card-body">
             <!-- Başlık ve Favori Kalbi -->
             <div class="mini-header">
               <h3 class="mini-title">${isim}</h3>
-              <button style="border:none; background:none; cursor:pointer;" data-islem="favori" data-indeks="${indeks}">
+              <button style="border:none; background:none; cursor:pointer;" data-islem="favori" data-indeks="${gercekIndeks}">
                 ${favori ? '❤️' : '🤍'}
               </button>
             </div>
 
             <!-- Konum, Kategori ve Puan -->
             <div class="mini-info">
-              <span>📍 ${sehir}</span>
+              <span>📍 ${konumBilgisi}</span>
               <span class="mini-tag">${kategori}</span>
               <span>⭐ ${puan.toFixed(1)}</span>
             </div>
@@ -77,7 +90,7 @@ function listeyiCiz(gosterilecekListe = mekanlar) {
             <p class="mini-desc">${miniAciklama}</p>
 
             <!-- Hava Durumu Kutusu -->
-            <div class="weather-box-mini" id="hava-${indeks}">
+            <div class="weather-box-mini" id="hava-${gercekIndeks}">
               🌤️ Yükleniyor...
             </div>
 
@@ -93,6 +106,7 @@ function listeyiCiz(gosterilecekListe = mekanlar) {
   // İstatistik paneli ve hava durumunu güncelle
   istatistikGuncelle(gosterilecekListe);
   kartHavaDurumlariniGuncelle(gosterilecekListe);
+  kartResimleriniGuncelle(gosterilecekListe);
 }
 
 // --- KARTLARA TIKLAMA OLAYI (Event Delegation) ---
@@ -114,13 +128,7 @@ seyehatListesi.addEventListener('click', function(e) {
 });
 
 // --- CANLI ARAMA ---
-aramaInput.addEventListener('input', function() {
-  const arananMetin = aramaInput.value.toLowerCase().trim();
-  const aramaSonuclari = mekanlar.filter(mekan => {
-    return mekan.isim.toLowerCase().includes(arananMetin) || mekan.sehir.toLowerCase().includes(arananMetin);
-  });
-  listeyiCiz(aramaSonuclari);
-});
+aramaInput.addEventListener('input', hepsiniFiltreleVeSirala);
 
 // --- KATEGORİ FİLTRELEME (İkonlu Butonlar) ---
 kategoriButonlari.addEventListener('click', function(e) {
@@ -131,17 +139,7 @@ kategoriButonlari.addEventListener('click', function(e) {
   document.querySelectorAll('.kat-btn').forEach(b => b.classList.remove('aktif'));
   buton.classList.add('aktif');
 
-  const secilenKategori = buton.dataset.kategori;
-
-  if (secilenKategori === 'hepsi') {
-    listeyiCiz(mekanlar);
-  } else if (secilenKategori === 'favori') {
-    const favoriler = mekanlar.filter(mekan => mekan.favori === true);
-    listeyiCiz(favoriler);
-  } else {
-    const filtrelenmis = mekanlar.filter(mekan => mekan.kategori === secilenKategori);
-    listeyiCiz(filtrelenmis);
-  }
+ hepsiniFiltreleVeSirala();
 });
 
 // --- MODAL DETAY VE SLIDER İŞLEMLERİ ---
@@ -150,7 +148,7 @@ async function detayGoster(indeks) {
 
   modalBaslik.textContent = mekan.isim;
   modalKategori.textContent = mekan.kategori;
-  modalSehir.textContent = `📍 ${mekan.sehir}`;
+  modalSehir.textContent = `📍 ${mekan.sehir}${mekan.ulke ? `, ${mekan.ulke}` : ''}`;
   modalAciklama.textContent = mekan.aciklama || 'Bu mekan hakkında henüz detaylı açıklama eklenmemiş.';
   modalPuan.textContent = `⭐ Puan: ${mekan.puan.toFixed(1)}`;
 
@@ -240,14 +238,63 @@ if (baslangic && bitis) {
 aramaBtn.addEventListener('click', () => {
   listeyiCiz();
 });
-siralamaSelect.addEventListener('change',function(){
-  if (siralamaSelect.value === "puan") {
-    const puan = mekanlar.sort((a,b) => b.puan - a.puan);
-    listeyiCiz(puan);
-  }else if(siralamaSelect.value === "isim"){
-    const isim = mekanlar.sort((a,b) => a.isim.localeCompare(b.isim));
-    listeyiCiz(isim);
+siralamaSelect.addEventListener('change',hepsiniFiltreleVeSirala);
+
+function hepsiniFiltreleVeSirala() {
+  const arananMetin = metinTemizleme(aramaInput.value);
+  const aktifButton = document.querySelector('.kat-btn.aktif');
+  const secilenKategori = aktifButton ? aktifButton.dataset.kategori: 'hepsi';
+  const siralamaTuru = siralamaSelect.value;
+
+  let sonuc = mekanlar;
+
+  if (secilenKategori === 'favori') {
+    sonuc = sonuc.filter(mekan => mekan.favori === true);
+  } else if (secilenKategori !== 'hepsi') {
+    sonuc = sonuc.filter(mekan => mekan.kategori === secilenKategori);
   }
-});
+
+  if (arananMetin !== '') {
+    sonuc = sonuc.filter(mekan =>{
+      const isimYalin = metinTemizleme(mekan.isim);
+      const sehirYalin = metinTemizleme(mekan.sehir);
+      const ulkeYalin = metinTemizleme(mekan.ulke);
+      
+      return (
+        isimYalin.includes(arananMetin) ||
+        sehirYalin.includes(arananMetin) ||
+        ulkeYalin.includes(arananMetin)
+      );
+    });
+  }
+
+  const siralamaSonuc = [...sonuc].sort((a,b) => {
+    if (siralamaTuru === 'puan') {
+      return b.puan - a.puan;
+    }else if (siralamaTuru === 'isim'){
+      return a.isim.localeCompare(b.isim, undefined, {sensitivity: 'base'});
+    }
+    return 0;
+  });  
+
+  listeyiCiz(siralamaSonuc);
+}
+async function kartResimleriniGuncelle(liste) {
+  liste.forEach(async (mekan) => {
+    const gercekIndeks = mekanlar.findIndex(m => m.isim === mekan.isim);
+    const imgElemani = document.querySelector(`#resim-${gercekIndeks}`);
+    if (!imgElemani) return;
+
+    // Mekanın 'aramaTerimi' bilgisiyle API'den 5 adet fotoğraf getiriyoruz
+    const sorgu = mekan.aramaTerimi || `${mekan.isim} ${mekan.sehir}`;
+    const fotograflar = await sehirFotograflariniGetir(sorgu, 5);
+
+    // Gelen 5 fotoğraf arasından Math.random() ile rastgele birini seçiyoruz
+    if (fotograflar && fotograflar.length > 0) {
+      const rastgeleIndeks = Math.floor(Math.random() * fotograflar.length);
+      imgElemani.src = fotograflar[rastgeleIndeks];
+    }
+  });
+}
 // --- İLK AÇILIŞTA ÇALIŞTIR ---
-listeyiCiz();
+hepsiniFiltreleVeSirala();
