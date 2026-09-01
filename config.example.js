@@ -1,0 +1,1 @@
+export const UNSPLASH_KEY = "buraya-kendi-unsplash-api-keyinizi-yazin";
