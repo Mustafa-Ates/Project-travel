@@ -24,7 +24,7 @@ const aramaBtn = document.querySelector('#aramaBtn');
 const siralamaSelect = document.querySelector('#siralamaSelect');
 
 // --- HAFIZA VE SLIDER DEĞİŞKENLERİ ---
-const havaDurumuHafizasi = {}; // Şehir hava durumlarını tekrar sorgulamamak için önbellek
+const resimHafizasi = {};
 let aktifResimler = []; // Modal içindeki slider fotoğrafları dizisi
 let mevcutResimIndeksi = 0; // O an gösterilen resmin indeksi
 
@@ -128,7 +128,7 @@ seyehatListesi.addEventListener('click', function(e) {
 });
 
 // --- CANLI ARAMA ---
-aramaInput.addEventListener('input', hepsiniFiltreleVeSirala);
+aramaInput.addEventListener('input', debounce(hepsiniFiltreleVeSirala,300));
 
 // --- KATEGORİ FİLTRELEME (İkonlu Butonlar) ---
 kategoriButonlari.addEventListener('click', function(e) {
@@ -156,7 +156,7 @@ async function detayGoster(indeks) {
   detayModal.classList.add('aktif');
 
   const sorgu = mekan.aramaTerimi || `${mekan.isim} ${mekan.sehir}`;
-  aktifResimler = await sehirFotograflariniGetir(sorgu, 4);
+  aktifResimler = await sehirFotograflariniGetir(sorgu, 4 , 1200);
   mevcutResimIndeksi = 0;
 
   if (aktifResimler.length > 0) {
@@ -279,18 +279,33 @@ function hepsiniFiltreleVeSirala() {
 
   listeyiCiz(siralamaSonuc);
 }
+function debounce(func, delay = 300) {
+  let timeoutId;
+  return (...args) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => func.apply(this, args), delay);
+  };
+}
 async function kartResimleriniGuncelle(liste) {
   liste.forEach(async (mekan) => {
     const gercekIndeks = mekanlar.findIndex(m => m.isim === mekan.isim);
     const imgElemani = document.querySelector(`#resim-${gercekIndeks}`);
     if (!imgElemani) return;
 
+    if (resimHafizasi[mekan.isim]) {
+      const fotograflar = resimHafizasi[mekan.isim];
+      const rastgeleIndeks = Math.floor(Math.random() * fotograflar.length);
+      imgElemani.src = fotograflar[rastgeleIndeks];
+      return;
+    }
+
     // Mekanın 'aramaTerimi' bilgisiyle API'den 5 adet fotoğraf getiriyoruz
     const sorgu = mekan.aramaTerimi || `${mekan.isim} ${mekan.sehir}`;
-    const fotograflar = await sehirFotograflariniGetir(sorgu, 5);
+    const fotograflar = await sehirFotograflariniGetir(sorgu, 5, 500);
 
     // Gelen 5 fotoğraf arasından Math.random() ile rastgele birini seçiyoruz
-    if (fotograflar && fotograflar.length > 0) {
+   if (fotograflar && fotograflar.length > 0) {
+      resimHafizasi[mekan.isim] = fotograflar; // Hafızaya sakla
       const rastgeleIndeks = Math.floor(Math.random() * fotograflar.length);
       imgElemani.src = fotograflar[rastgeleIndeks];
     }
