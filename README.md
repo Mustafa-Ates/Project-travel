@@ -25,3 +25,8 @@ Users can filter travel destinations by country or city, add them to their favor
 2. Rename `config.example.js` to `config.js`
 3. Get a free API key from [Unsplash Developers](https://unsplash.com/developers) and add it inside `config.js`
 4. Open `indeks.html` in your browser
+
+## Author
+
+**Mustafa Ateş**  
+[GitHub](https://github.com/Mustafa-Ates)
